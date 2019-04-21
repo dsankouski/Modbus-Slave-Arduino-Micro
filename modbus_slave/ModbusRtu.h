@@ -85,7 +85,7 @@ enum MESSAGE {
  * Modbus function codes summary. 
  * These are the implement function codes either for Master or for Slave.
  *
- * @see also fctsupported
+ * @see also fctsupSerialed
  * @see also modbus_t
  */
 enum MB_FC {
@@ -122,7 +122,7 @@ enum {
   EXC_EXECUTE = 4 
 };
 
-const unsigned char fctsupported[] = { 
+const unsigned char fctsupSerialed[] = { 
   MB_FC_READ_COILS,
   MB_FC_READ_DISCRETE_INPUT,
   MB_FC_READ_REGISTERS, 
@@ -144,10 +144,7 @@ const unsigned char fctsupported[] = {
  */
 class Modbus {
 private:
-  HardwareSerial *port; //!< Pointer to Serial class object
   uint8_t u8id; //!< 0=master, 1..247=slave number
-  uint8_t u8serno; //!< serial port: 0-Serial, 1..3-Serial1..Serial3
-  uint8_t u8txenpin; //!< flow control pin: 0=USB or RS-232 mode, >0=RS-485 mode
   uint8_t u8state;
   uint8_t u8lastError;
   uint8_t au8Buffer[MAX_BUFFER];
@@ -159,7 +156,7 @@ private:
   uint32_t u32time, u32timeOut;
   uint8_t u8regsize;
 
-  void init(uint8_t u8id, uint8_t u8serno, uint8_t u8txenpin);
+  void init(uint8_t u8id);
   void sendTxBuffer(); 
   int8_t getRxBuffer(); 
   uint16_t calcCRC(uint8_t u8length);
@@ -177,8 +174,7 @@ private:
 
 public:
   Modbus(); 
-  Modbus(uint8_t u8id, uint8_t u8serno); 
-  Modbus(uint8_t u8id, uint8_t u8serno, uint8_t u8txenpin);
+  Modbus(uint8_t u8id); 
   void begin(long u32speed);
   void begin();
   void setTimeOut( uint16_t u16timeout); //!<write communication watch-dog timer
@@ -194,7 +190,7 @@ public:
   uint8_t getState();
   uint8_t getLastError(); //!<get last error message
   void setID( uint8_t u8id ); //!<write new ID for the slave
-  void end(); //!<finish any communication and release serial communication port
+  void end(); //!<finish any communication and release serial communication Serial
 };
 
 /* _____PUBLIC FUNCTIONS_____________________________________________________ */
@@ -206,44 +202,14 @@ public:
  * @ingroup setup
  */
 Modbus::Modbus() {
-  init(0, 0, 0);
-}
-
-/**
- * @brief
- * Full constructor for a Master/Slave through USB/RS232C
- * 
- * @param u8id   node address 0=master, 1..247=slave
- * @param u8serno  serial port used 0..3
- * @ingroup setup
- * @overload Modbus::Modbus(uint8_t u8id, uint8_t u8serno)
- * @overload Modbus::Modbus()
- */
-Modbus::Modbus(uint8_t u8id, uint8_t u8serno) {
-  init(u8id, u8serno, 0);
-}
-
-/**
- * @brief
- * Full constructor for a Master/Slave through USB/RS232C/RS485
- * It needs a pin for flow control only for RS485 mode
- * 
- * @param u8id   node address 0=master, 1..247=slave
- * @param u8serno  serial port used 0..3
- * @param u8txenpin pin for txen RS-485 (=0 means USB/RS232C mode)
- * @ingroup setup
- * @overload Modbus::Modbus(uint8_t u8id, uint8_t u8serno, uint8_t u8txenpin)
- * @overload Modbus::Modbus()
- */
-Modbus::Modbus(uint8_t u8id, uint8_t u8serno, uint8_t u8txenpin) {
-  init(u8id, u8serno, u8txenpin);
+  init(0);
 }
 
 /**
  * @brief
  * Initialize class object.
  * 
- * Sets up the serial port using specified baud rate.
+ * Sets up the serial Serial using specified baud rate.
  * Call once class has been instantiated, typically within setup().
  * 
  * @see http://arduino.cc/en/Serial/Begin#.Uy4CJ6aKlHY
@@ -252,40 +218,10 @@ Modbus::Modbus(uint8_t u8id, uint8_t u8serno, uint8_t u8txenpin) {
  * @ingroup setup
  */
 void Modbus::begin(long u32speed) {
+  // Serial.begin(u32speed, u8config);
+  Serial.begin(u32speed);
 
-  switch( u8serno ) {
-#if defined(UBRR1H)
-  case 1:
-    port = &Serial1;
-    break;
-#endif
-
-#if defined(UBRR2H)
-  case 2:
-    port = &Serial2;
-    break;
-#endif
-
-#if defined(UBRR3H)
-  case 3:
-    port = &Serial3;
-    break;
-#endif
-  case 0:
-  default:
-    port = &Serial;
-    break;
-  }
-
-  // port->begin(u32speed, u8config);
-  port->begin(u32speed);
-  if (u8txenpin > 1) { // pin 0 & pin 1 are reserved for RX/TX
-    // return RS485 transceiver to transmit mode
-    pinMode(u8txenpin, OUTPUT);
-    digitalWrite(u8txenpin, LOW);
-  }
-
-  port->flush();
+  Serial.flush();
   u8lastRec = u8BufferSize = 0;
   u16InCnt = u16OutCnt = u16errCnt = 0;
 }
@@ -516,7 +452,7 @@ int8_t Modbus::query( modbus_t telegram ) {
  */
 int8_t Modbus::poll() {
   // check if there is any incoming frame
-  uint8_t u8current = port->available();  
+  uint8_t u8current = Serial.available();  
 
   if (millis() > u32timeOut) {
     u8state = COM_IDLE;
@@ -595,7 +531,7 @@ int8_t Modbus::poll( uint16_t *regs, uint8_t u8size ) {
   u8regsize = u8size;
 
   // check if there is any incoming frame
-  uint8_t u8current = port->available();  
+  uint8_t u8current = Serial.available();  
   if (u8current == 0) return 0;
 
   // check T35 after frame end or still no frame end
@@ -658,10 +594,8 @@ int8_t Modbus::poll( uint16_t *regs, uint8_t u8size ) {
 
 /* _____PRIVATE FUNCTIONS_____________________________________________________ */
 
-void Modbus::init(uint8_t u8id, uint8_t u8serno, uint8_t u8txenpin) {
+void Modbus::init(uint8_t u8id) {
   this->u8id = u8id;
-  this->u8serno = (u8serno > 3) ? 0 : u8serno;
-  this->u8txenpin = u8txenpin;
   this->u16timeOut = 1000;
 }
 
@@ -675,11 +609,9 @@ void Modbus::init(uint8_t u8id, uint8_t u8serno, uint8_t u8txenpin) {
 int8_t Modbus::getRxBuffer() {
   boolean bBuffOverflow = false;
 
-  if (u8txenpin > 1) digitalWrite( u8txenpin, LOW );
-
   u8BufferSize = 0;
-  while ( port->available() ) {
-    au8Buffer[ u8BufferSize ] = port->read();
+  while ( Serial.available() ) {
+    au8Buffer[ u8BufferSize ] = Serial.read();
     u8BufferSize ++;
 
     if (u8BufferSize >= MAX_BUFFER) bBuffOverflow = true;
@@ -715,67 +647,9 @@ void Modbus::sendTxBuffer() {
   au8Buffer[ u8BufferSize ] = u16crc & 0x00ff;
   u8BufferSize++;
 
-  // set RS485 transceiver to transmit mode
-  if (u8txenpin > 1) {
-    switch( u8serno ) {
-#if defined(UBRR1H)
-    case 1:
-      UCSR1A=UCSR1A |(1 << TXC1);
-      break;
-#endif
-
-#if defined(UBRR2H)
-    case 2:
-      UCSR2A=UCSR2A |(1 << TXC2);
-      break;
-#endif
-
-#if defined(UBRR3H)
-    case 3:
-      UCSR3A=UCSR3A |(1 << TXC3);
-      break;
-#endif
-    case 0:
-    default:
-      UCSR0A=UCSR0A |(1 << TXC0);
-      break;
-    }
-    digitalWrite( u8txenpin, HIGH );
-  }
-
   // transfer buffer to serial line
-  port->write( au8Buffer, u8BufferSize );
-
-  // keep RS485 transceiver in transmit mode as long as sending
-  if (u8txenpin > 1) {
-    switch( u8serno ) {
-#if defined(UBRR1H)
-    case 1:
-      while (!(UCSR1A & (1 << TXC1)));
-      break;
-#endif
-
-#if defined(UBRR2H)
-    case 2:
-      while (!(UCSR2A & (1 << TXC2)));
-      break;
-#endif
-
-#if defined(UBRR3H)
-    case 3:
-      while (!(UCSR3A & (1 << TXC3)));
-      break;
-#endif
-    case 0:
-    default:
-      while (!(UCSR0A & (1 << TXC0)));
-      break;
-    }
-
-    // return RS485 transceiver to receive mode
-    digitalWrite( u8txenpin, LOW );
-  }
-  port->flush();
+  Serial.write( au8Buffer, u8BufferSize );
+//  Serial.flush();
   u8BufferSize = 0;
 
   // set time-out for master
@@ -832,16 +706,6 @@ uint8_t Modbus::validateRequest() {
 
   // check fct code
   boolean isSupported = false;
-  for (uint8_t i = 0; i< sizeof( fctsupported ); i++) {
-    if (fctsupported[i] == au8Buffer[FUNC]) {
-      isSupported = 1;
-      break;
-    }
-  }
-  if (!isSupported) {
-    u16errCnt ++;
-    return EXC_FUNC_CODE;
-  }
 
   // check start address & nb range
   uint16_t u16regs = 0;
@@ -898,19 +762,6 @@ uint8_t Modbus::validateAnswer() {
   if ((au8Buffer[ FUNC ] & 0x80) != 0) {
     u16errCnt ++;
     return ERR_EXCEPTION;
-  }
-
-  // check fct code
-  boolean isSupported = false;
-  for (uint8_t i = 0; i< sizeof( fctsupported ); i++) {
-    if (fctsupported[i] == au8Buffer[FUNC]) {
-      isSupported = 1;
-      break;
-    }
-  }
-  if (!isSupported) {
-    u16errCnt ++;
-    return EXC_FUNC_CODE;
   }
 
   return 0; // OK, no exception code thrown

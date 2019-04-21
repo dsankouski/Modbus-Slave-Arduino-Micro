@@ -1,14 +1,15 @@
 
 #include "ModbusRtu.h"
-
-#define ID   1      // адрес ведомого
+#include "Arduino.h"
+#define BOARD_ID 1
 #define btnPin  2   // номер входа, подключенный к кнопке
 #define stlPin  13  // номер выхода индикатора работы
                     // расположен на плате Arduino
 #define ledPin  12  // номер выхода светодиода
 
 //Задаём ведомому адрес, последовательный порт, выход управления TX
-Modbus slave(ID, 0, 0); 
+//uint8_t BOARD_ID = 1;
+Modbus slave(BOARD_ID); 
 boolean led;
 int8_t state = 0;
 unsigned long tempus;
@@ -17,6 +18,7 @@ unsigned long tempus;
 uint16_t au16data[11];
 
 void setup() {
+  //slave.setID(BOARD_ID);
   // настраиваем входы и выходы
   io_setup();
   // настраиваем последовательный порт ведомого
@@ -63,4 +65,3 @@ void io_poll() {
   au16data[9] = slave.getOutCnt();
   au16data[10] = slave.getErrCnt();
 }
-
