@@ -9,7 +9,7 @@
 
 //Задаём ведомому адрес, последовательный порт, выход управления TX
 //uint8_t BOARD_ID = 1;
-Modbus slave(BOARD_ID); 
+Modbus slave(BOARD_ID, 0, 0); 
 boolean led;
 int8_t state = 0;
 unsigned long tempus;
